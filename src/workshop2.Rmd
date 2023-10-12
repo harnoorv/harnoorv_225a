@@ -1,0 +1,91 @@
+---
+title: "BMS225A Workshop 2"
+Author: Harnoor
+Data: 10122023
+output:
+  html_document:
+    df_print: paged
+---
+#weather data analysis 
+
+
+```{r load_library}
+library(tidyverse)
+```
+
+```{r read_in_data}
+sf_weather <- read.csv("../raw_data/sf_weather_2023.csv")
+
+head(sf_weather)
+colnames(sf_weather)
+
+```
+
+
+```{r subset the data}
+select(sf_weather,DATE)
+
+
+sf_weather%>%
+  select(DATE)
+
+
+```
+
+
+```{r subset and split out data}
+sf_weather_temp <- sf_weather %>%
+  select(c("DATE","TMAX","TMIN")) %>% 
+  na.omit() %>% 
+  separate(DATE, c("YEAR","MONTH","DAY"),sep = "-",remove = FALSE) %>% 
+  filter(YEAR == "2021") %>% 
+  mutate(TAVG = ((TMAX + TMIN)/2)) %>% 
+  group_by(MONTH) %>% 
+  summarize(MAX_MO_TEMP = max(TAVG))
+ 
+
+
+head(sf_weather_temp)
+
+```
+
+```{r plotting our data}
+plot(sf_weather_temp)
+
+```
+
+
+```{r applying functions}
+yearly_subsetter <- function(year){
+  year_subset <- sf_weather %>%
+  select(c("DATE","TMAX","TMIN")) %>% 
+  na.omit() %>% 
+  separate(DATE, c("YEAR","MONTH","DAY"),sep = "-",remove = FALSE) %>% 
+  filter(YEAR == year) %>% 
+  mutate(TAVG = ((TMAX + TMIN)/2)) %>% 
+  group_by(MONTH) %>% 
+  summarize(MAX_MO_TEMP = max(TAVG))
+  
+  return(year_subset)
+  }
+
+yearly_subsetter("2020")
+```
+
+
+```{r Apply function to data}
+year_var <- "1980"
+
+plot(yearly_subsetter(year = year_var), main = year_var)
+
+```
+
+
+```{r applying function with loops}
+for(my_year_var in c("1970", "1980", "2000")){
+  plot(yearly_subsetter(year = my_year_var), main = my_year_var)
+}
+```
+
+
+
