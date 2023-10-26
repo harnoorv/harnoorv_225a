@@ -1,0 +1,209 @@
+---
+title: "Naive T cell scRNA-seq import and analysis"
+authors: Dan Bunis, Rebecca Jaszczak
+date: "10/10/2022"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    theme: united
+---
+
+```{r setup & libraries, include=FALSE}
+#set some Rmd defaults
+knitr::opts_chunk$set(echo = TRUE, fig.height = 6, fig.width = 7, warning = F)
+
+#load in libraries
+library(dittoSeq)
+library(tidyverse)
+library(Seurat)
+library(ggplot2)
+```
+
+```{r load in processed}
+#read in T cells processed object
+Tcells <- readRDS("../processed_data/Tcells_analyzed.rds")
+
+```
+
+```{r pca and clustering}
+#rerun the steps we did before saving last week
+
+Tcells <- RunPCA(
+  object = Tcells,
+  verbose = FALSE,
+  npcs = 12)
+
+pca_dims <- 1:9
+
+Tcells <- FindNeighbors(object = Tcells,
+                        reduction = "pca",
+                        k.param = 20,
+                        dims = pca_dims)
+
+Tcells <- FindClusters(object = Tcells,
+                       modularity.fxn = 1,
+                       algorithm = 1,
+                       resolution = c(0.1,0.2))
+Tcells <- RunUMAP(
+  object = Tcells,
+  reduction = "pca",
+  dims = pca_dims,
+  seed.use = 1)
+```
+
+```{r save processed obj}
+saveRDS(Tcells, file = "../processed_data/Tcells_analyzed.rds")
+```
+
+
+
+```{r umap}
+#Colored with CD4s lighter and CD8s darker 
+dittoDimPlot(object = Tcells, var = 'Tage', size = 1.5, reduction.use = 'umap', colors = c(1,9,2,10,3,11), main = 'T cells lineage and age')
+
+#dittoDimPlot of clustering results
+dittoDimPlot(Tcells, "RNA_snn_res.0.1", size = 1.5, "umap")
+
+```
+
+https://twitter.com/hadleywickham/status/643381054758363136
+
+```{r plotting variables}
+tage <- unique(Tcells$Tage)
+
+tage[[3]]
+
+cols <- c(1,9,2,10,3,11)
+
+#scales::show_col(dittoColors()[cols])
+
+#install.packages('scales')
+scales::show_col(dittoColors()[cols])
+
+```
+
+```{r updating umap with number of cells, fig.height=3, fig.width=4}
+#write a line of code to calculate the number of cells in the object, and add it as a "cells_label" variable to the plot
+cells_label <- length(colnames(Tcells))
+
+main_umap = dittoDimPlot(Tcells,
+                         "Tage", size = 1, reduction.use = "umap", legend.show = FALSE,
+                         color.panel = dittoColors()[cols], main = NULL) +
+  annotate('text', x=-5.5, y=5, label = cells_label)
+main_umap
+```
+
+```{r write highlight cluster fucntion}
+#proof of concept for function below 
+#Tcells$Tage==tage[1]
+
+#write a Tage highlighter function
+highlight_cluster <- function(selected_tage, selected_color){
+  dittoDimPlot(Tcells,'Tage', size = 1, reduction.use = 'umap', 
+               cells.use = Tcells$Tage==selected_tage, colors = selected_color, 
+               legend.show = FALSE, ylab = NULL,xlab = NULL, main = NULL, 
+               show.axes.numbers = FALSE)
+}
+
+```
+
+```{r making cool highlight plots}
+#write a loop to iterate through and make the highlight plots
+#write functioning highlight code
+
+#apply hihglight code to single Tage category
+#highlight_cluster(tage[1])
+
+plot_list <- c()
+
+#create object with all highlight plots 
+for (x in 1:6) {
+  single_plot <- highlight_cluster(selected_tage = tage[x],
+                          selected_color = cols[x])
+  plot_list[[x]] <- single_plot
+}
+
+plot_list[[7]] <- main_umap
+
+```
+
+
+
+```{r }
+# adding legend seperately for ultimate flexibility!
+legend = dittoSeq:::.grab_legend(
+  dittoDimPlot(Tcells, "Tage", reduction.use = 'umap',
+               color.panel = dittoColors()[cols])
+  )
+legend
+```
+
+```{r add legend to plot list }
+#add the legend to the plotlist
+plot_list[[8]] <- legend
+```
+
+```{r, fig.height=6, fig.width=6}
+plots = 
+  gridExtra::grid.arrange(
+    grobs = plot_list,
+    layout_matrix = matrix(c(
+      7,7,7,2,
+      7,7,7,6,
+      7,7,7,4,
+      1,5,3,8),
+      ncol = 4))
+```
+
+```{r, fig.height=3, fig.width=4}
+dittoDimPlot(Tcells, "Age", reduction.use = 'umap')
+dittoDimPlot(Tcells, "RNA_snn_res.0.2", reduction.use = 'umap')
+
+age.clust <- factor(Tcells@meta.data$RNA_snn_res.0.2, 
+                    labels = 
+                      c("adult-cluster",
+                        "UCB-cluster",
+                        "fetal-cluster"))
+
+Tcells@meta.data$age.cluster <- age.clust
+
+Idents(Tcells) <- "age.cluster"
+
+dittoDimPlot(Tcells, "age.cluster", reduction.use = 'umap')
+```
+
+```{r remake barplot figures, fig.height=2, fig.width=4}
+simple_labels = c(paste0("F",1:5),paste0("U",1:5),paste0("A",1:5))
+
+dittoBarPlot(
+    object = Tcells,
+    var = "age.cluster",
+    group.by = "Sample",
+    x.reorder = c(6:10,11:15,1:5),
+    main = NULL, 
+    cells.use = Tcells$Tcelltype=='CD4', 
+    ylab = "Fraction of CD4\nin each cluster", 
+    legend.show = FALSE,
+    x.labels = simple_labels,
+    x.labels.rotate = T,
+    xlab = NULL, 
+    colors = c(1,3,2))
+
+dittoBarPlot(
+    object = Tcells,
+    var = "age.cluster",
+    group.by = "Sample",
+    x.reorder = c(6:8,9:13,1:5),
+    main = NULL, 
+    cells.use = Tcells$Tcelltype=='CD8', 
+    ylab = "Fraction of CD8\nin each cluster", 
+    legend.show = FALSE,
+    x.labels = simple_labels[c(1,3,5:15)],
+    x.labels.rotate = T,
+    xlab = NULL, 
+    colors = c(1,3,2))
+```
+
+
